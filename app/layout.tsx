@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import Sidebar from "./components/Sidebar";
+import { Toaster } from "@/components/ui/sonner";
 
 const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="h-full flex bg-gray-50 text-gray-900 antialiased">
         <Sidebar />
         <main className="flex-1 overflow-y-auto p-8">{children}</main>
+        <Toaster richColors position="top-right" />
       </body>
     </html>
   );

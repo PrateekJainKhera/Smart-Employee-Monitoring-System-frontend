@@ -1,232 +1,392 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  getCameras, createCamera, deleteCamera, updateCamera, type Camera,
-} from "@/lib/api";
-import { Plus, Trash2, Pencil, X, Check, Wifi, WifiOff } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { toast } from "sonner";
+import { getCameras, createCamera, deleteCamera, updateCamera, type Camera } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Plus, Trash2, Pencil, Wifi, WifiOff, Eye, EyeOff, ScanSearch, Crosshair } from "lucide-react";
 
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const cameraSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  location_label: z.string().min(1, "Location label is required"),
+  rtsp_url: z.string().min(1, "RTSP URL is required"),
+});
+type CameraFormValues = z.infer<typeof cameraSchema>;
 const LOCATION_LABELS = ["entry", "exit", "floor_1", "floor_2", "parking", "cafeteria", "lobby"];
 
+type StreamMode = "raw" | "detected" | "tracked";
+
+const STREAM_ENDPOINT: Record<StreamMode, string> = {
+  raw: "stream",
+  detected: "stream/detected",
+  tracked: "stream/tracked",
+};
+
+// ── Live Preview Component ───────────────────────────────────────────
+function CameraPreview({ camera, mode }: { camera: Camera; mode: StreamMode }) {
+  const [error, setError] = useState(false);
+  const [key, setKey] = useState(0);
+
+  const streamUrl = `${BASE_URL}/api/v1/cameras/${camera.id}/${STREAM_ENDPOINT[mode]}`;
+
+  useEffect(() => {
+    setError(false);
+    setKey(k => k + 1);
+  }, [mode, camera.id]);
+
+  return (
+    <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+      {error ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 text-sm gap-2">
+          <WifiOff size={24} />
+          <span>No frame available</span>
+          <span className="text-xs">Camera may still be connecting...</span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 text-xs h-7"
+            onClick={() => { setError(false); setKey(k => k + 1); }}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : (
+        <img
+          key={key}
+          src={streamUrl}
+          alt={`${camera.name} live feed`}
+          className="w-full h-full object-contain"
+          onError={() => setError(true)}
+        />
+      )}
+      {/* Overlay badges */}
+      <div className="absolute top-2 left-2 flex gap-1.5">
+        <Badge variant="default" className="text-xs bg-red-600 gap-1 animate-pulse">
+          ● LIVE
+        </Badge>
+        {mode === "detected" && (
+          <Badge variant="default" className="text-xs bg-blue-600 gap-1">
+            <ScanSearch size={10} /> Detection
+          </Badge>
+        )}
+        {mode === "tracked" && (
+          <Badge variant="default" className="text-xs bg-purple-600 gap-1">
+            <Crosshair size={10} /> Tracking
+          </Badge>
+        )}
+      </div>
+      <div className="absolute bottom-2 left-2">
+        <Badge variant="secondary" className="text-xs font-mono opacity-80">
+          {camera.name} · {camera.location_label}
+        </Badge>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ────────────────────────────────────────────────────────
 export default function CamerasPage() {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [showForm, setShowForm] = useState(false);
+  const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [previewCam, setPreviewCam] = useState<Camera | null>(null);
+  const [streamMode, setStreamMode] = useState<StreamMode>("raw");
 
-  const [form, setForm] = useState({ name: "", location_label: "entry", rtsp_url: "" });
-  const [submitting, setSubmitting] = useState(false);
+  const form = useForm<CameraFormValues>({
+    resolver: zodResolver(cameraSchema),
+    defaultValues: { name: "", location_label: "entry", rtsp_url: "" },
+  });
 
   const load = () => {
     setLoading(true);
     getCameras()
       .then(setCameras)
-      .catch(() => setError("Failed to load cameras."))
+      .catch(() => toast.error("Failed to load cameras."))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
 
-  const resetForm = () => {
-    setForm({ name: "", location_label: "entry", rtsp_url: "" });
-    setShowForm(false);
+  const openCreate = () => {
+    form.reset({ name: "", location_label: "entry", rtsp_url: "" });
     setEditId(null);
+    setOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim() || !form.rtsp_url.trim()) return;
-    setSubmitting(true);
+  const openEdit = (cam: Camera) => {
+    form.reset({ name: cam.name, location_label: cam.location_label, rtsp_url: cam.rtsp_url });
+    setEditId(cam.id);
+    setOpen(true);
+  };
+
+  const onSubmit = async (values: CameraFormValues) => {
     try {
       if (editId !== null) {
-        await updateCamera(editId, form);
+        await updateCamera(editId, values);
+        toast.success("Camera updated");
       } else {
-        await createCamera(form);
+        const created = await createCamera(values);
+        toast.success("Camera registered — starting stream...");
+        // Auto-open preview for newly added camera
+        setPreviewCam(created);
       }
-      resetForm();
+      setOpen(false);
       load();
     } catch {
-      setError("Failed to save camera.");
-    } finally {
-      setSubmitting(false);
+      toast.error("Failed to save camera.");
     }
   };
 
-  const handleEdit = (cam: Camera) => {
-    setForm({ name: cam.name, location_label: cam.location_label, rtsp_url: cam.rtsp_url });
-    setEditId(cam.id);
-    setShowForm(true);
-  };
-
-  const handleDelete = async (id: number) => {
-    if (!confirm("Delete this camera?")) return;
-    try {
-      await deleteCamera(id);
-      load();
-    } catch {
-      setError("Failed to delete camera.");
-    }
-  };
-
-  const handleToggleActive = async (cam: Camera) => {
+  const handleToggle = async (cam: Camera) => {
     try {
       await updateCamera(cam.id, { is_active: !cam.is_active });
+      toast.success(`Camera ${cam.is_active ? "deactivated" : "activated"}`);
+      if (!cam.is_active === false && previewCam?.id === cam.id) setPreviewCam(null);
       load();
     } catch {
-      setError("Failed to update camera.");
+      toast.error("Failed to update status.");
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (deleteId === null) return;
+    try {
+      await deleteCamera(deleteId);
+      toast.success("Camera removed");
+      if (previewCam?.id === deleteId) setPreviewCam(null);
+      load();
+    } catch {
+      toast.error("Failed to delete camera.");
+    } finally {
+      setDeleteId(null);
     }
   };
 
   return (
-    <div className="max-w-4xl">
-      <div className="flex items-center justify-between mb-1">
-        <h2 className="text-2xl font-bold text-gray-800">Cameras</h2>
-        <button
-          onClick={() => { resetForm(); setShowForm(true); }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Plus size={16} /> Add Camera
-        </button>
+    <div className="max-w-6xl space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Cameras</h2>
+          <p className="text-muted-foreground text-sm mt-1">
+            {loading ? "Loading..." : `${cameras.length} configured · ${cameras.filter(c => c.is_active).length} active`}
+          </p>
+        </div>
+        <Button onClick={openCreate} className="gap-2">
+          <Plus size={15} /> Add Camera
+        </Button>
       </div>
-      <p className="text-sm text-gray-500 mb-6">
-        {cameras.length} camera{cameras.length !== 1 ? "s" : ""} &nbsp;·&nbsp;
-        {cameras.filter(c => c.is_active).length} active
-      </p>
 
-      {error && (
-        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex justify-between">
-          {error}
-          <button onClick={() => setError("")}><X size={14} /></button>
-        </div>
+      {/* Live Preview Panel */}
+      {previewCam && (
+        <Card>
+          <CardHeader className="pb-3 flex-row items-center justify-between">
+            <CardTitle className="text-sm font-semibold">Live Preview — {previewCam.name}</CardTitle>
+            <div className="flex gap-2">
+              <Button
+                variant={streamMode === "raw" ? "default" : "outline"}
+                size="sm"
+                className="gap-1.5 text-xs h-7"
+                onClick={() => setStreamMode("raw")}
+              >
+                Raw
+              </Button>
+              <Button
+                variant={streamMode === "detected" ? "default" : "outline"}
+                size="sm"
+                className="gap-1.5 text-xs h-7"
+                onClick={() => setStreamMode("detected")}
+              >
+                <ScanSearch size={12} /> Detection
+              </Button>
+              <Button
+                variant={streamMode === "tracked" ? "default" : "outline"}
+                size="sm"
+                className="gap-1.5 text-xs h-7"
+                onClick={() => setStreamMode("tracked")}
+              >
+                <Crosshair size={12} /> Tracking
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-xs h-7"
+                onClick={() => setPreviewCam(null)}
+              >
+                <EyeOff size={12} /> Close
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <CameraPreview camera={previewCam} mode={streamMode} />
+          </CardContent>
+        </Card>
       )}
 
-      {/* Form */}
-      {showForm && (
-        <div className="mb-6 bg-white border border-gray-200 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">
-            {editId !== null ? "Edit Camera" : "New Camera"}
-          </h3>
-          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Camera Name *</label>
-              <input
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Entry Camera 1"
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Location Label *</label>
-              <select
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                value={form.location_label}
-                onChange={e => setForm(f => ({ ...f, location_label: e.target.value }))}
-              >
-                {LOCATION_LABELS.map(l => (
-                  <option key={l} value={l}>{l}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs text-gray-500 mb-1">RTSP URL *</label>
-              <input
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="rtsp://192.168.1.1/stream1"
-                value={form.rtsp_url}
-                onChange={e => setForm(f => ({ ...f, rtsp_url: e.target.value }))}
-                required
-              />
-            </div>
-            <div className="col-span-2 flex gap-2 justify-end">
-              <button
-                type="button"
-                onClick={resetForm}
-                className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                <Check size={14} />
-                {submitting ? "Saving..." : editId !== null ? "Update" : "Create"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Table */}
-      {loading ? (
-        <div className="text-center py-16 text-gray-400 text-sm">Loading...</div>
-      ) : cameras.length === 0 ? (
-        <div className="text-center py-16 text-gray-400 text-sm">
-          No cameras yet. Click &quot;Add Camera&quot; to register one.
-        </div>
-      ) : (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Name</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Location</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">RTSP URL</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {cameras.map(cam => (
-                <tr key={cam.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-gray-800">{cam.name}</td>
-                  <td className="px-4 py-3">
-                    <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-mono">
-                      {cam.location_label}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 font-mono text-xs truncate max-w-[180px]">
-                    {cam.rtsp_url}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => handleToggleActive(cam)}
-                      className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full transition-colors ${
-                        cam.is_active
-                          ? "bg-green-50 text-green-600 hover:bg-green-100"
-                          : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                      }`}
-                    >
-                      {cam.is_active ? <Wifi size={12} /> : <WifiOff size={12} />}
-                      {cam.is_active ? "Active" : "Inactive"}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2 justify-end">
-                      <button
-                        onClick={() => handleEdit(cam)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      >
-                        <Pencil size={14} />
+      {/* Camera Table */}
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead className="hidden sm:table-cell">Location</TableHead>
+                <TableHead className="hidden md:table-cell">Source</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 5 }).map((_, j) => (
+                      <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : cameras.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-16 text-muted-foreground">
+                    No cameras yet. Click &quot;Add Camera&quot; to register one.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                cameras.map(cam => (
+                  <TableRow
+                    key={cam.id}
+                    className={previewCam?.id === cam.id ? "bg-blue-50" : ""}
+                  >
+                    <TableCell className="font-medium">{cam.name}</TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <Badge variant="outline" className="font-mono text-xs">{cam.location_label}</Badge>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell font-mono text-xs text-muted-foreground">
+                      {cam.rtsp_url === "0" ? "Webcam (index 0)" : cam.rtsp_url}
+                    </TableCell>
+                    <TableCell>
+                      <button onClick={() => handleToggle(cam)}>
+                        <Badge
+                          variant={cam.is_active ? "default" : "secondary"}
+                          className="gap-1 cursor-pointer select-none"
+                        >
+                          {cam.is_active ? <Wifi size={11} /> : <WifiOff size={11} />}
+                          {cam.is_active ? "Active" : "Inactive"}
+                        </Badge>
                       </button>
-                      <button
-                        onClick={() => handleDelete(cam.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex gap-1 justify-end">
+                        <Button
+                          variant={previewCam?.id === cam.id ? "default" : "ghost"}
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setPreviewCam(previewCam?.id === cam.id ? null : cam)}
+                          title="Preview"
+                        >
+                          <Eye size={13} />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(cam)}>
+                          <Pencil size={13} />
+                        </Button>
+                        <Button
+                          variant="ghost" size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => setDeleteId(cam.id)}
+                        >
+                          <Trash2 size={13} />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Create / Edit Dialog */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editId !== null ? "Edit Camera" : "New Camera"}</DialogTitle>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
+              <FormField control={form.control} name="name" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Camera Name *</FormLabel>
+                  <FormControl><Input placeholder="Entry Camera 1" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="location_label" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Location Label *</FormLabel>
+                  <Select value={field.value} onValueChange={v => { if (v) field.onChange(v); }}>
+                    <FormControl>
+                      <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {LOCATION_LABELS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="rtsp_url" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Source *</FormLabel>
+                  <FormControl>
+                    <Input className="font-mono text-sm" placeholder="0  (webcam)  or  rtsp://192.168.1.1/stream" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <DialogFooter className="pt-2">
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+                <Button type="submit" disabled={form.formState.isSubmitting}>
+                  {form.formState.isSubmitting ? "Saving..." : editId !== null ? "Update" : "Create"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Camera</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the camera and stop its stream. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
