@@ -42,6 +42,16 @@ export const updateEmployee = (id: number, data: Partial<Employee>) =>
   api.put<Employee>(`/api/v1/employees/${id}`, data).then(r => r.data);
 export const deleteEmployee = (id: number) =>
   api.delete(`/api/v1/employees/${id}`);
+export const registerFace = async (id: number, file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  const r = await api.post(`/api/v1/employees/${id}/face`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return r.data;
+};
+export const getFaceImageUrl = (id: number) =>
+  `${api.defaults.baseURL}/api/v1/employees/${id}/face`;
 
 // Cameras
 export const getCameras = () => api.get<Camera[]>("/api/v1/cameras").then(r => r.data);

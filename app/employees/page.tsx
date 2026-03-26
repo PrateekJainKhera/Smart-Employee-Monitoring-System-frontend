@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { getEmployees, createEmployee, deleteEmployee, updateEmployee, type Employee } from "@/lib/api";
+import { getEmployees, createEmployee, deleteEmployee, updateEmployee, registerFace, getFaceImageUrl, type Employee } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -24,14 +24,14 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, UserCheck, UserX } from "lucide-react";
+import { Plus, Trash2, Pencil, UserCheck, UserX, Camera } from "lucide-react";
 
 // ── Zod Schema ──────────────────────────────────────────────────────
 const employeeSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   department: z.string(),
   designation: z.string(),
-  email: z.union([z.string().email("Invalid email address"), z.literal("")]),
+  email: z.union([z.email("Invalid email address"), z.literal("")]),
 });
 
 type EmployeeFormValues = z.infer<typeof employeeSchema>;
@@ -42,6 +42,13 @@ export default function EmployeesPage() {
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+
+  // Face upload state
+  const [faceUploadId, setFaceUploadId] = useState<number | null>(null);
+  const [faceUploading, setFaceUploading] = useState(false);
+  const [facePreview, setFacePreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
@@ -96,6 +103,36 @@ export default function EmployeesPage() {
       toast.error("Failed to delete employee.");
     } finally {
       setDeleteId(null);
+    }
+  };
+
+  const openFaceUpload = (emp: Employee) => {
+    setFaceUploadId(emp.id);
+    setFacePreview(emp.face_registered ? getFaceImageUrl(emp.id) : null);
+    setSelectedFile(null);
+  };
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+    setFacePreview(URL.createObjectURL(file));
+  };
+
+  const submitFace = async () => {
+    if (!faceUploadId || !selectedFile) return;
+    setFaceUploading(true);
+    try {
+      await registerFace(faceUploadId, selectedFile);
+      toast.success("Face registered successfully");
+      setFaceUploadId(null);
+      setSelectedFile(null);
+      setFacePreview(null);
+      load();
+    } catch {
+      toast.error("Face registration failed. Make sure the photo shows a clear face.");
+    } finally {
+      setFaceUploading(false);
     }
   };
 
@@ -164,6 +201,14 @@ export default function EmployeesPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-1 justify-end">
+                        <Button
+                          variant="ghost" size="icon"
+                          className="h-8 w-8"
+                          title="Register face"
+                          onClick={() => openFaceUpload(emp)}
+                        >
+                          <Camera size={13} />
+                        </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(emp)}>
                           <Pencil size={13} />
                         </Button>
@@ -243,6 +288,49 @@ export default function EmployeesPage() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Face Upload Dialog */}
+      <Dialog open={faceUploadId !== null} onOpenChange={() => { setFaceUploadId(null); setFacePreview(null); setSelectedFile(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Register Face</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            {/* Preview */}
+            <div
+              className="w-full aspect-square rounded-lg border-2 border-dashed border-muted flex items-center justify-center bg-muted/30 overflow-hidden cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {facePreview ? (
+                <img src={facePreview} alt="Face preview" className="w-full h-full object-cover" />
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-muted-foreground text-sm">
+                  <Camera size={32} />
+                  <span>Click to select a photo</span>
+                </div>
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={onFileChange}
+            />
+            <p className="text-xs text-muted-foreground">
+              Use a clear, front-facing photo. The face must be fully visible.
+            </p>
+          </div>
+          <DialogFooter className="pt-2">
+            <Button variant="outline" onClick={() => { setFaceUploadId(null); setFacePreview(null); setSelectedFile(null); }}>
+              Cancel
+            </Button>
+            <Button onClick={submitFace} disabled={!selectedFile || faceUploading}>
+              {faceUploading ? "Registering..." : "Register"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
