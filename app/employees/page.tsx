@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { getEmployees, createEmployee, deleteEmployee, updateEmployee, registerFace, getFaceImageUrl, type Employee } from "@/lib/api";
+import { getEmployees, createEmployee, deleteEmployee, updateEmployee, registerFace, getFaceImageUrl, getFacePhotos, type Employee } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +48,7 @@ export default function EmployeesPage() {
   const [faceUploading, setFaceUploading] = useState(false);
   const [facePreview, setFacePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [facePhotoCount, setFacePhotoCount] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<EmployeeFormValues>({
@@ -106,10 +107,20 @@ export default function EmployeesPage() {
     }
   };
 
-  const openFaceUpload = (emp: Employee) => {
+  const openFaceUpload = async (emp: Employee) => {
     setFaceUploadId(emp.id);
     setFacePreview(emp.face_registered ? getFaceImageUrl(emp.id) : null);
     setSelectedFile(null);
+    if (emp.face_registered) {
+      try {
+        const data = await getFacePhotos(emp.id);
+        setFacePhotoCount(data.total_photos);
+      } catch {
+        setFacePhotoCount(0);
+      }
+    } else {
+      setFacePhotoCount(0);
+    }
   };
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -123,11 +134,12 @@ export default function EmployeesPage() {
     if (!faceUploadId || !selectedFile) return;
     setFaceUploading(true);
     try {
-      await registerFace(faceUploadId, selectedFile);
-      toast.success("Face registered successfully");
-      setFaceUploadId(null);
+      const result = await registerFace(faceUploadId, selectedFile);
+      const count = result.total_photos ?? facePhotoCount + 1;
+      setFacePhotoCount(count);
+      toast.success(`Photo ${count} registered — add more angles for better accuracy`);
       setSelectedFile(null);
-      setFacePreview(null);
+      setFacePreview(getFaceImageUrl(faceUploadId, count));
       load();
     } catch {
       toast.error("Face registration failed. Make sure the photo shows a clear face.");
@@ -292,10 +304,17 @@ export default function EmployeesPage() {
       </Dialog>
 
       {/* Face Upload Dialog */}
-      <Dialog open={faceUploadId !== null} onOpenChange={() => { setFaceUploadId(null); setFacePreview(null); setSelectedFile(null); }}>
+      <Dialog open={faceUploadId !== null} onOpenChange={() => { setFaceUploadId(null); setFacePreview(null); setSelectedFile(null); setFacePhotoCount(0); }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Register Face</DialogTitle>
+            <DialogTitle>
+              Register Face
+              {facePhotoCount > 0 && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {facePhotoCount} photo{facePhotoCount > 1 ? "s" : ""} stored
+                </span>
+              )}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
             {/* Preview */}
@@ -320,16 +339,28 @@ export default function EmployeesPage() {
               onChange={onFileChange}
             />
             <p className="text-xs text-muted-foreground">
-              Use a clear, front-facing photo. The face must be fully visible.
+              {facePhotoCount === 0
+                ? "Upload a front-facing photo first."
+                : "Add more angles (left, right, tilted) to improve recognition accuracy."}
             </p>
+            {facePhotoCount > 0 && !selectedFile && (
+              <button
+                className="w-full text-xs text-primary underline text-left"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                + Add another angle ({facePhotoCount} stored)
+              </button>
+            )}
           </div>
           <DialogFooter className="pt-2">
-            <Button variant="outline" onClick={() => { setFaceUploadId(null); setFacePreview(null); setSelectedFile(null); }}>
-              Cancel
+            <Button variant="outline" onClick={() => { setFaceUploadId(null); setFacePreview(null); setSelectedFile(null); setFacePhotoCount(0); }}>
+              {facePhotoCount > 0 && !selectedFile ? "Done" : "Cancel"}
             </Button>
-            <Button onClick={submitFace} disabled={!selectedFile || faceUploading}>
-              {faceUploading ? "Registering..." : "Register"}
-            </Button>
+            {selectedFile && (
+              <Button onClick={submitFace} disabled={faceUploading}>
+                {faceUploading ? "Registering..." : facePhotoCount === 0 ? "Register" : "Add Photo"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

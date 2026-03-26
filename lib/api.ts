@@ -50,8 +50,16 @@ export const registerFace = async (id: number, file: File) => {
   });
   return r.data;
 };
-export const getFaceImageUrl = (id: number) =>
-  `${api.defaults.baseURL}/api/v1/employees/${id}/face`;
+export const getFaceImageUrl = (id: number, photoIndex: number = 1) =>
+  `${api.defaults.baseURL}/api/v1/employees/${id}/face/${photoIndex}`;
+
+export const getFacePhotos = (id: number) =>
+  api.get<{ total_photos: number; photos: { index: number; url: string }[] }>(
+    `/api/v1/employees/${id}/faces`
+  ).then(r => r.data);
+
+export const deleteFacePhoto = (id: number, photoIndex: number) =>
+  api.delete(`/api/v1/employees/${id}/face/${photoIndex}`).then(r => r.data);
 
 // Cameras
 export const getCameras = () => api.get<Camera[]>("/api/v1/cameras").then(r => r.data);
