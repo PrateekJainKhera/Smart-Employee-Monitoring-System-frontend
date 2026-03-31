@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getHealth, getEmployees, getCameras, type HealthStatus, type Employee, type Camera } from "@/lib/api";
+import { getHealth, getEmployees, getCameras, getDailyReport, type HealthStatus, type Employee, type Camera, type DailyReport } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,28 +16,21 @@ function formatUptime(seconds: number): string {
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
 }
 
-// Mock chart data — replaced in Phase 5 with real attendance data
-const MOCK_ATTENDANCE = [
-  { day: "Mon", present: 18, absent: 4 },
-  { day: "Tue", present: 20, absent: 2 },
-  { day: "Wed", present: 17, absent: 5 },
-  { day: "Thu", present: 21, absent: 1 },
-  { day: "Fri", present: 19, absent: 3 },
-];
-
 export default function DashboardPage() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [cameras, setCameras] = useState<Camera[]>([]);
+  const [report, setReport] = useState<DailyReport | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([getHealth(), getEmployees(), getCameras()])
-      .then(([h, emps, cams]) => {
+    Promise.all([getHealth(), getEmployees(), getCameras(), getDailyReport()])
+      .then(([h, emps, cams, rpt]) => {
         setHealth(h);
         setEmployees(emps);
         setCameras(cams);
+        setReport(rpt);
       })
       .catch(() => setError("Cannot reach backend. Make sure the server is running on port 8000."))
       .finally(() => setLoading(false));
@@ -51,7 +44,7 @@ export default function DashboardPage() {
       {/* Page Header */}
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Dashboard</h2>
-        <p className="text-muted-foreground text-sm mt-1">System overview — Phase 1 · In-Memory Storage</p>
+        <p className="text-muted-foreground text-sm mt-1">System overview — Phase 6 · SQL Server</p>
       </div>
 
       {error && (
@@ -111,23 +104,30 @@ export default function DashboardPage() {
         {/* Attendance Chart */}
         <Card className="lg:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Weekly Attendance (Preview)</CardTitle>
-            <p className="text-xs text-muted-foreground">Live data available in Phase 5</p>
+            <CardTitle className="text-sm font-semibold">Today&apos;s Attendance</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
               <Skeleton className="h-48 w-full" />
             ) : (
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={MOCK_ATTENDANCE} barCategoryGap="30%">
+                <BarChart
+                  data={report ? [
+                    { day: "Present", count: report.present },
+                    { day: "Absent", count: report.absent },
+                    { day: "Inside", count: report.inside },
+                    { day: "On Break", count: report.on_break },
+                    { day: "Checked Out", count: report.checked_out },
+                  ] : []}
+                  barCategoryGap="30%"
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="day" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
                   <Tooltip
                     contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #e5e7eb" }}
                   />
-                  <Bar dataKey="present" name="Present" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="absent" name="Absent" fill="#f87171" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" name="Count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}

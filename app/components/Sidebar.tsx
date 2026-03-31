@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Camera } from "lucide-react";
+import { LayoutDashboard, Users, Camera, Activity, ClipboardList, BarChart2 } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/monitoring", label: "Monitoring", icon: Activity },
+  { href: "/attendance", label: "Attendance", icon: ClipboardList },
   { href: "/employees", label: "Employees", icon: Users },
   { href: "/cameras", label: "Cameras", icon: Camera },
+  { href: "/reports", label: "Reports", icon: BarChart2 },
 ];
 
 export default function Sidebar() {
@@ -46,8 +49,8 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="px-6 py-4 border-t border-gray-700">
-        <p className="text-xs text-gray-500">Phase 1 — Foundation</p>
-        <p className="text-xs text-gray-600">v1.0.0</p>
+        <p className="text-xs text-gray-500">Phase 6 — Complete</p>
+        <p className="text-xs text-gray-600">v6.0.0</p>
       </div>
     </aside>
   );
