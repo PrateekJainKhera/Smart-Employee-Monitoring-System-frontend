@@ -80,6 +80,7 @@ export interface AttendanceLog {
   total_hours: number | null;
   date: string;
   break_count: number;
+  on_break: boolean;
 }
 
 export interface AttendanceStatus {

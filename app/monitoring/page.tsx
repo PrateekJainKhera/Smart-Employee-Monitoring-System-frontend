@@ -106,6 +106,7 @@ export default function MonitoringPage() {
         let status: Status = "absent";
         if (log) {
           if (log.check_out) status = "checked_out";
+          else if (log.on_break) status = "on_break";
           else status = "inside";
         }
         map.set(emp.id, {
