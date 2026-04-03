@@ -158,3 +158,34 @@ export interface BreakLog {
 
 export const getBreaks = (attendanceLogId: number) =>
   api.get<BreakLog[]>(`/api/v1/attendance/breaks/${attendanceLogId}`).then(r => r.data);
+
+export interface Snapshot {
+  id: string;
+  filename: string;
+  timestamp: string;
+  camera_id: number;
+  camera_label: string;
+  employee_id: number | null;
+  employee_name: string | null;
+  confidence: number | null;
+  method: string;
+  matched: boolean;
+}
+
+export const getSnapshots = (params?: {
+  camera_id?: number;
+  employee_id?: number;
+  matched?: boolean;
+  limit?: number;
+}) => {
+  const q = new URLSearchParams();
+  if (params?.camera_id   != null) q.set("camera_id",   String(params.camera_id));
+  if (params?.employee_id != null) q.set("employee_id", String(params.employee_id));
+  if (params?.matched     != null) q.set("matched",     String(params.matched));
+  if (params?.limit       != null) q.set("limit",       String(params.limit));
+  const qs = q.toString();
+  return api.get<Snapshot[]>(`/api/v1/snapshots${qs ? `?${qs}` : ""}`).then(r => r.data);
+};
+
+export const getSnapshotImageUrl = (filename: string) =>
+  `${api.defaults.baseURL}/api/v1/snapshots/${encodeURIComponent(filename)}/image`;
