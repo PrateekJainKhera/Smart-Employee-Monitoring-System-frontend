@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import {
   getTodayAttendance, getAttendanceByDate, getExportUrl, getBreaks,
-  type AttendanceLog, type BreakLog,
+  getSightingsSummary,
+  type AttendanceLog, type BreakLog, type SightingSummary,
 } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Calendar, Download, Coffee } from "lucide-react";
+import { Calendar, Download, Coffee, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 function fmt(iso: string | null): string {
@@ -54,6 +55,7 @@ export default function AttendancePage() {
   const [breakLog, setBreakLog] = useState<AttendanceLog | null>(null);
   const [breaks, setBreaks] = useState<BreakLog[]>([]);
   const [breaksLoading, setBreaksLoading] = useState(false);
+  const [sightings, setSightings] = useState<SightingSummary[]>([]);
 
   const load = (d: string) => {
     setLoading(true);
@@ -63,6 +65,9 @@ export default function AttendancePage() {
       .then(setLogs)
       .catch(() => toast.error("Failed to load attendance."))
       .finally(() => setLoading(false));
+    if (isToday) {
+      getSightingsSummary().then(setSightings).catch(() => {});
+    }
   };
 
   useEffect(() => { load(date); }, []);
@@ -139,6 +144,7 @@ export default function AttendancePage() {
                 <TableHead>Check Out</TableHead>
                 <TableHead>Hours</TableHead>
                 <TableHead>Breaks</TableHead>
+                <TableHead>Seen Today</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -146,40 +152,56 @@ export default function AttendancePage() {
               {loading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : logs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-16 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-16 text-muted-foreground">
                     No attendance records for {date}.
                   </TableCell>
                 </TableRow>
               ) : (
-                logs.map(log => (
-                  <TableRow key={log.id}>
-                    <TableCell className="font-medium">{log.employee_name}</TableCell>
-                    <TableCell className="font-mono text-sm">{fmt(log.check_in)}</TableCell>
-                    <TableCell className="font-mono text-sm">{fmt(log.check_out)}</TableCell>
-                    <TableCell>{log.total_hours != null ? `${log.total_hours.toFixed(2)}h` : "—"}</TableCell>
-                    <TableCell>
-                      {log.break_count > 0 ? (
-                        <button
-                          onClick={() => openBreaks(log)}
-                          className="flex items-center gap-1 text-amber-600 hover:text-amber-700 font-medium text-sm"
-                        >
-                          <Coffee size={13} />
-                          {log.break_count} break{log.break_count > 1 ? "s" : ""}
-                        </button>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell><StatusBadge log={log} /></TableCell>
-                  </TableRow>
-                ))
+                logs.map(log => {
+                  const s = sightings.find(s => s.employee_id === log.employee_id);
+                  return (
+                    <TableRow key={log.id}>
+                      <TableCell className="font-medium">{log.employee_name}</TableCell>
+                      <TableCell className="font-mono text-sm">{fmt(log.check_in)}</TableCell>
+                      <TableCell className="font-mono text-sm">{fmt(log.check_out)}</TableCell>
+                      <TableCell>{log.total_hours != null ? `${log.total_hours.toFixed(2)}h` : "—"}</TableCell>
+                      <TableCell>
+                        {log.break_count > 0 ? (
+                          <button
+                            onClick={() => openBreaks(log)}
+                            className="flex items-center gap-1 text-amber-600 hover:text-amber-700 font-medium text-sm"
+                          >
+                            <Coffee size={13} />
+                            {log.break_count} break{log.break_count > 1 ? "s" : ""}
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {s ? (
+                          <div className="flex items-center gap-1 text-sm">
+                            <Eye size={13} className="text-blue-500" />
+                            <span className="font-medium">{s.total}x</span>
+                            <span className="text-muted-foreground text-xs">
+                              ({s.cameras.map(c => `${c.label}: ${c.count}`).join(", ")})
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell><StatusBadge log={log} /></TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

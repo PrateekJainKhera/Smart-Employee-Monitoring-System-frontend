@@ -189,3 +189,14 @@ export const getSnapshots = (params?: {
 
 export const getSnapshotImageUrl = (filename: string) =>
   `${api.defaults.baseURL}/api/v1/snapshots/${encodeURIComponent(filename)}/image`;
+
+// Sightings
+export interface SightingSummary {
+  employee_id: number;
+  name: string;
+  total: number;
+  cameras: { label: string; camera_id: number; count: number }[];
+}
+
+export const getSightingsSummary = () =>
+  api.get<SightingSummary[]>("/api/v1/sightings/summary").then(r => r.data);
