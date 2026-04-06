@@ -251,7 +251,11 @@ export default function EmployeesPage() {
     try {
       const result = await registerFace(faceUploadId, selectedFile);
       const count = result.total_photos ?? facePhotoCount + 1;
-      toast.success(`Photo ${count} registered — add more angles for better accuracy`);
+      if (result.warning) {
+        toast.warning(`Photo ${count} saved — ${result.warning}`);
+      } else {
+        toast.success(`Photo ${count} registered — add more angles for better accuracy`);
+      }
       setSelectedFile(null);
       setFacePreview(null);
       setCaptured(false);

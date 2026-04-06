@@ -44,9 +44,11 @@ export const deleteEmployee = (id: number) =>
   api.delete(`/api/v1/employees/${id}`);
 export const registerFace = async (id: number, file: File) => {
   const form = new FormData();
-  form.append("file", file);
+  form.append("file", file, file.name || "photo.jpg");
+  // Set Content-Type to undefined to remove the axios instance default (application/json)
+  // This lets the browser auto-set multipart/form-data with the correct boundary
   const r = await api.post(`/api/v1/employees/${id}/face`, form, {
-    headers: { "Content-Type": "multipart/form-data" },
+    headers: { "Content-Type": undefined },
   });
   return r.data;
 };
