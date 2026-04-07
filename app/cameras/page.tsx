@@ -16,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Wifi, WifiOff, Eye, EyeOff, ScanSearch, Crosshair } from "lucide-react";
+import { Plus, Trash2, Pencil, Wifi, WifiOff, Eye, EyeOff, ScanSearch, Crosshair, LayoutGrid } from "lucide-react";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const cameraSchema = z.object({
@@ -106,6 +106,7 @@ export default function CamerasPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [previewCam, setPreviewCam] = useState<Camera | null>(null);
   const [streamMode, setStreamMode] = useState<StreamMode>("raw");
+  const [showGrid, setShowGrid] = useState(false);
 
   const form = useForm<CameraFormValues>({
     resolver: zodResolver(cameraSchema),
@@ -187,50 +188,72 @@ export default function CamerasPage() {
             {loading ? "Loading..." : `${cameras.length} configured · ${cameras.filter(c => c.is_active).length} active`}
           </p>
         </div>
-        <Button onClick={openCreate} className="gap-2">
-          <Plus size={15} /> Add Camera
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant={showGrid ? "default" : "outline"}
+            onClick={() => { setShowGrid(g => !g); setPreviewCam(null); }}
+            className="gap-2"
+          >
+            <LayoutGrid size={15} /> {showGrid ? "Hide All" : "View All"}
+          </Button>
+          <Button onClick={openCreate} className="gap-2">
+            <Plus size={15} /> Add Camera
+          </Button>
+        </div>
       </div>
 
-      {/* Live Preview Panel */}
-      {previewCam && (
+      {/* Stream mode selector — shown when any preview is active */}
+      {(showGrid || previewCam) && (
+        <div className="flex gap-2 items-center">
+          <span className="text-sm text-muted-foreground mr-1">Mode:</span>
+          {(["raw", "detected", "tracked"] as StreamMode[]).map(m => (
+            <Button
+              key={m}
+              variant={streamMode === m ? "default" : "outline"}
+              size="sm"
+              className="gap-1.5 text-xs h-7"
+              onClick={() => setStreamMode(m)}
+            >
+              {m === "detected" && <ScanSearch size={12} />}
+              {m === "tracked" && <Crosshair size={12} />}
+              {m.charAt(0).toUpperCase() + m.slice(1)}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {/* All Cameras Grid */}
+      {showGrid && cameras.filter(c => c.is_active).length > 0 && (
+        <div className={`grid gap-4 ${
+          cameras.filter(c => c.is_active).length === 1 ? "grid-cols-1" :
+          cameras.filter(c => c.is_active).length === 2 ? "grid-cols-2" :
+          "grid-cols-2 xl:grid-cols-3"
+        }`}>
+          {cameras.filter(c => c.is_active).map(cam => (
+            <Card key={cam.id}>
+              <CardContent className="p-2">
+                <CameraPreview camera={cam} mode={streamMode} />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+      {showGrid && cameras.filter(c => c.is_active).length === 0 && (
+        <Card>
+          <CardContent className="py-10 text-center text-muted-foreground text-sm">
+            No active cameras to display.
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Single Camera Preview Panel */}
+      {!showGrid && previewCam && (
         <Card>
           <CardHeader className="pb-3 flex-row items-center justify-between">
             <CardTitle className="text-sm font-semibold">Live Preview — {previewCam.name}</CardTitle>
-            <div className="flex gap-2">
-              <Button
-                variant={streamMode === "raw" ? "default" : "outline"}
-                size="sm"
-                className="gap-1.5 text-xs h-7"
-                onClick={() => setStreamMode("raw")}
-              >
-                Raw
-              </Button>
-              <Button
-                variant={streamMode === "detected" ? "default" : "outline"}
-                size="sm"
-                className="gap-1.5 text-xs h-7"
-                onClick={() => setStreamMode("detected")}
-              >
-                <ScanSearch size={12} /> Detection
-              </Button>
-              <Button
-                variant={streamMode === "tracked" ? "default" : "outline"}
-                size="sm"
-                className="gap-1.5 text-xs h-7"
-                onClick={() => setStreamMode("tracked")}
-              >
-                <Crosshair size={12} /> Tracking
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 text-xs h-7"
-                onClick={() => setPreviewCam(null)}
-              >
-                <EyeOff size={12} /> Close
-              </Button>
-            </div>
+            <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-7" onClick={() => setPreviewCam(null)}>
+              <EyeOff size={12} /> Close
+            </Button>
           </CardHeader>
           <CardContent>
             <CameraPreview camera={previewCam} mode={streamMode} />
