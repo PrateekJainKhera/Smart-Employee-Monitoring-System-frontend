@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Camera, Activity, ClipboardList, BarChart2, ScanFace } from "lucide-react";
+import { LayoutDashboard, Users, Camera, Activity, ClipboardList, BarChart2, ScanFace, Settings } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -12,6 +12,7 @@ const navItems = [
   { href: "/cameras", label: "Cameras", icon: Camera },
   { href: "/reports", label: "Reports", icon: BarChart2 },
   { href: "/snapshots", label: "Snapshots", icon: ScanFace },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export default function Sidebar() {

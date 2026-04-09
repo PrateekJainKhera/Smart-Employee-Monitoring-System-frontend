@@ -32,7 +32,7 @@ export default function DashboardPage() {
         setCameras(cams);
         setReport(rpt);
       })
-      .catch(() => setError("Cannot reach backend. Make sure the server is running on port 8000."))
+      .catch(() => setError(`Cannot reach backend. Make sure the server is running at ${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}.`))
       .finally(() => setLoading(false));
   }, []);
 

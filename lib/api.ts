@@ -81,6 +81,7 @@ export interface AttendanceLog {
   check_out: string | null;
   total_hours: number | null;
   date: string;
+  identified_by: string | null;
   break_count: number;
   on_break: boolean;
 }

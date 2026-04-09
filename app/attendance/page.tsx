@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Calendar, Download, Coffee, Eye } from "lucide-react";
+import { Calendar, Download, Coffee, Eye, Scan, Shirt } from "lucide-react";
 import { toast } from "sonner";
 
 function fmt(iso: string | null): string {
@@ -37,6 +37,28 @@ function breakTypeBadge(type: string | null) {
   return (
     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
       {type ?? "—"}
+    </span>
+  );
+}
+
+function IdentifiedByBadge({ method }: { method: string | null }) {
+  if (!method || method === "face") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+        <Scan size={10} /> Face
+      </span>
+    );
+  }
+  if (method === "clothing_assist") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
+        <Shirt size={10} /> Clothing Assist
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+      {method}
     </span>
   );
 }
@@ -145,6 +167,7 @@ export default function AttendancePage() {
                 <TableHead>Hours</TableHead>
                 <TableHead>Breaks</TableHead>
                 <TableHead>Seen Today</TableHead>
+                <TableHead>Identified By</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -152,14 +175,14 @@ export default function AttendancePage() {
               {loading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : logs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-16 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-16 text-muted-foreground">
                     No attendance records for {date}.
                   </TableCell>
                 </TableRow>
@@ -198,6 +221,7 @@ export default function AttendancePage() {
                           <span className="text-muted-foreground text-sm">—</span>
                         )}
                       </TableCell>
+                      <TableCell><IdentifiedByBadge method={log.identified_by} /></TableCell>
                       <TableCell><StatusBadge log={log} /></TableCell>
                     </TableRow>
                   );
