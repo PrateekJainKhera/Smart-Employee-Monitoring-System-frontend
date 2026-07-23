@@ -116,7 +116,7 @@ export interface MovementEvent {
 }
 
 export interface WsEvent {
-  event: "snapshot" | "checkin" | "checkout" | "break_start" | "break_end" | "detected" | "unknown";
+  event: "snapshot" | "checkin" | "checkout" | "break_start" | "break_end" | "detected" | "unknown" | "alert";
   employee_id?: number;
   employee_name?: string;
   camera_id?: number;
@@ -128,6 +128,10 @@ export interface WsEvent {
   auto?: boolean;
   data?: AttendanceLog[];
   timestamp: string;
+  // alert-specific
+  alert_type?: "missing" | "after_hours";
+  minutes_since_seen?: number;
+  office_end_hour?: number;
 }
 
 // New API functions
@@ -203,3 +207,20 @@ export interface SightingSummary {
 
 export const getSightingsSummary = () =>
   api.get<SightingSummary[]>("/api/v1/sightings/summary").then(r => r.data);
+
+export interface CameraVisit {
+  camera_id: number;
+  camera_label: string;
+  first_seen: string;
+  last_seen: string;
+  count: number;
+}
+
+export interface EmployeeTimeline {
+  employee_id: number;
+  name: string;
+  visits: CameraVisit[];
+}
+
+export const getAllTimelines = () =>
+  api.get<EmployeeTimeline[]>("/api/v1/sightings/timeline").then(r => r.data);

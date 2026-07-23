@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Calendar, Download, Coffee, Eye, Scan, Shirt } from "lucide-react";
+import { Calendar, Download, Coffee, Eye, Scan, Shirt, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 function fmt(iso: string | null): string {
@@ -53,6 +53,13 @@ function IdentifiedByBadge({ method }: { method: string | null }) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
         <Shirt size={10} /> Clothing Assist
+      </span>
+    );
+  }
+  if (method === "reid") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
+        <ShieldCheck size={10} /> Full ReID
       </span>
     );
   }

@@ -38,10 +38,9 @@ const MODES = [
     id: "face_reid",
     label: "Face + Full ReID",
     icon: ShieldCheck,
-    badge: "Coming soon",
-    badgeColor: "bg-gray-100 text-gray-500",
-    description: "Face recognition + OSNet deep ReID model for maximum tracking accuracy. Handles complex scenarios like same-color uniforms with pattern differences. (Not yet available)",
-    disabled: true,
+    badge: "Best accuracy",
+    badgeColor: "bg-green-100 text-green-700",
+    description: "Face recognition + OSNet deep ReID model. On first check-in each day, a full-body appearance embedding is captured and used to identify the employee when their face isn't visible. Embedding updates automatically if a better-quality crop is detected.",
   },
 ];
 
@@ -115,10 +114,8 @@ export default function SettingsPage() {
               return (
                 <button
                   key={mode.id}
-                  disabled={mode.disabled}
-                  onClick={() => !mode.disabled && setSelected(mode.id)}
-                  className={`w-full text-left rounded-xl border-2 p-4 transition-all
-                    ${mode.disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-gray-400"}
+                  onClick={() => setSelected(mode.id)}
+                  className={`w-full text-left rounded-xl border-2 p-4 transition-all cursor-pointer hover:border-gray-400
                     ${isSelected ? "border-black bg-gray-50" : "border-gray-200"}
                   `}
                 >
@@ -150,8 +147,8 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* ReID Parameters — shown only when face_clothing is selected */}
-      {selected === "face_clothing" && settings && (
+      {/* ReID Parameters — shown when face_clothing or face_reid is selected */}
+      {(selected === "face_clothing" || selected === "face_reid") && settings && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">

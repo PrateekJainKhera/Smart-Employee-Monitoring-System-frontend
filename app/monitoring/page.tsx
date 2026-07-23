@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { getEmployees, getTodayAttendance, type Employee, type AttendanceLog, type WsEvent } from "@/lib/api";
+import { getEmployees, getTodayAttendance, getAllTimelines, type Employee, type AttendanceLog, type WsEvent, type EmployeeTimeline } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Wifi, WifiOff, Clock, Eye } from "lucide-react";
+import { Activity, Wifi, WifiOff, Clock, Eye, MapPin, ArrowRight, Bell, AlertTriangle } from "lucide-react";
 
 type Status = "absent" | "inside" | "on_break" | "checked_out";
 
@@ -26,6 +26,14 @@ interface LiveEvent {
   detail: string;
   timestamp: string;
   color: string;
+}
+
+interface AlertEntry {
+  id: number;
+  alert_type: "missing" | "after_hours";
+  employee_name: string;
+  detail: string;
+  timestamp: string;
 }
 
 const WS_URL = (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000") + "/ws/live";
@@ -87,15 +95,19 @@ function eventDetail(ev: WsEvent): string {
 export default function MonitoringPage() {
   const [entries, setEntries] = useState<Map<number, MonitorEntry>>(new Map());
   const [events, setEvents] = useState<LiveEvent[]>([]);
+  const [timelines, setTimelines] = useState<EmployeeTimeline[]>([]);
+  const [alerts, setAlerts] = useState<AlertEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const eventIdRef = useRef(0);
 
   const load = useCallback(async () => {
     try {
-      const [employees, todayLogs] = await Promise.all([
+      const [employees, todayLogs, tls] = await Promise.all([
         getEmployees(),
         getTodayAttendance(),
+        getAllTimelines().catch(() => []),
       ]);
+      setTimelines(tls);
 
       const logMap = new Map<number, AttendanceLog>();
       for (const log of todayLogs) logMap.set(log.employee_id, log);
@@ -149,6 +161,20 @@ export default function MonitoringPage() {
       });
     }
 
+    if (ev.event === "alert" && ev.alert_type) {
+      const detail = ev.alert_type === "missing"
+        ? `not seen for ${ev.minutes_since_seen ?? "?"} min`
+        : `detected after ${ev.office_end_hour ?? 19}:00`;
+      setAlerts(prev => [{
+        id: ++eventIdRef.current,
+        alert_type: ev.alert_type as "missing" | "after_hours",
+        employee_name: ev.employee_name ?? "Unknown",
+        detail,
+        timestamp: ev.timestamp,
+      }, ...prev].slice(0, 20));
+      return;
+    }
+
     if (ev.event !== "snapshot") {
       const liveEv: LiveEvent = {
         id: ++eventIdRef.current,
@@ -179,11 +205,55 @@ export default function MonitoringPage() {
           <h2 className="text-2xl font-bold tracking-tight">Live Monitoring</h2>
           <p className="text-muted-foreground text-sm mt-1">Real-time employee location and status</p>
         </div>
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${connected ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-700"}`}>
-          {connected ? <Wifi size={14} /> : <WifiOff size={14} />}
-          {connected ? "Live" : "Reconnecting..."}
+        <div className="flex items-center gap-3">
+          {alerts.length > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border bg-red-50 border-red-200 text-red-700 animate-pulse">
+              <Bell size={14} />
+              {alerts.length} Alert{alerts.length > 1 ? "s" : ""}
+            </div>
+          )}
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${connected ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-700"}`}>
+            {connected ? <Wifi size={14} /> : <WifiOff size={14} />}
+            {connected ? "Live" : "Reconnecting..."}
+          </div>
         </div>
       </div>
+
+      {/* Alerts Panel */}
+      {alerts.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 border-b border-red-200">
+            <div className="flex items-center gap-2 text-sm font-semibold text-red-700">
+              <AlertTriangle size={14} />
+              Active Alerts
+            </div>
+            <button
+              onClick={() => setAlerts([])}
+              className="text-xs text-red-500 hover:text-red-700"
+            >
+              Dismiss all
+            </button>
+          </div>
+          <div className="divide-y divide-red-100 max-h-48 overflow-y-auto">
+            {alerts.map(a => (
+              <div key={a.id} className="flex items-center justify-between px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                    a.alert_type === "missing"
+                      ? "bg-orange-100 text-orange-700"
+                      : "bg-red-100 text-red-700"
+                  }`}>
+                    {a.alert_type === "missing" ? "Missing" : "After Hours"}
+                  </span>
+                  <span className="text-sm font-medium">{a.employee_name}</span>
+                  <span className="text-xs text-muted-foreground">{a.detail}</span>
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0">{fmt(a.timestamp)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-4 gap-3">
         {(["inside", "on_break", "checked_out", "absent"] as Status[]).map(s => (
@@ -274,6 +344,48 @@ export default function MonitoringPage() {
           </div>
         </div>
       </div>
+
+      {/* Movement Timeline */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <MapPin size={14} />
+            Movement Timeline — Today
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {timelines.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              No movement recorded yet today.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {timelines.map(emp => (
+                <div key={emp.employee_id}>
+                  <p className="text-xs font-semibold text-gray-700 mb-2">{emp.name}</p>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {emp.visits.map((visit, i) => (
+                      <div key={visit.camera_id} className="flex items-center gap-1">
+                        <div className="flex flex-col items-center bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5 text-center min-w-[80px]">
+                          <span className="text-xs font-semibold text-blue-700 capitalize">{visit.camera_label}</span>
+                          <span className="text-xs text-muted-foreground">{fmt(visit.first_seen)}</span>
+                          {visit.first_seen !== visit.last_seen && (
+                            <span className="text-xs text-muted-foreground">– {fmt(visit.last_seen)}</span>
+                          )}
+                          <span className="text-xs text-blue-400 mt-0.5">{visit.count}×</span>
+                        </div>
+                        {i < emp.visits.length - 1 && (
+                          <ArrowRight size={12} className="text-gray-400 shrink-0" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
